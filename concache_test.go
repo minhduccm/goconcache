@@ -105,7 +105,7 @@ func TestGetSetCache(testing *testing.T) {
 	value2, found2 := cache.Get("GOCONCURRENCACHE")
 	actualValue1 := value1.(int)
 	actualValue2 := value2.(string)
-	if !found1 || !found2 || actualValue1 != 123 || actualValue2 != "56789" {
+	if !found1 || actualValue1 != 123 {
 		testing.Errorf("Item 1: Expect 123, but return %d", actualValue1)
 	}
 
@@ -117,14 +117,14 @@ func TestGetSetCache(testing *testing.T) {
 func TestDeleteCache(testing *testing.T) {
 	cache := NewCache(BUCKETS_COUNT, "cache")
 	cache.Set("GOCACHE", 123, NO_EXPIRATION)
-	value1, found := cache.Get("GOCACHE")
-	if !found || value1.(int) != 123 {
+	value1, found1 := cache.Get("GOCACHE")
+	if !found1 || value1.(int) != 123 {
 		testing.Errorf("Expect value of cache should be equal to 123, but %d", value1.(int))
 	}
 
 	cache.Delete("GOCACHE")
-	value2, found := cache.Get("GOCACHE")
-	if found {
+	value2, found2 := cache.Get("GOCACHE")
+	if found2 {
 		testing.Errorf("Expect: value of cache should be deleted, but %d", value2.(int))
 	}
 }
@@ -139,7 +139,7 @@ func TestExpiredItems(testing *testing.T) {
 		"gophers",
 	}
 	cache.Set("concache", &tempStruct, time.Second*3)
-	value1, found := cache.Get("concache")
+	value1, _ := cache.Get("concache")
 	fmt.Printf("Value of cache before expired: %v", value1)
 
 	time.Sleep(time.Second * 4)
@@ -147,6 +147,102 @@ func TestExpiredItems(testing *testing.T) {
 	value2, found := cache.Get("concache")
 	if found {
 		testing.Errorf("Expect: value of cache should be deleted when expired, but %v", value2)
+	}
+}
+
+func TestDeleteExpiredItems(testing *testing.T) {
+	cache := NewCache(BUCKETS_COUNT, "cache")
+	tempStruct := struct {
+		first  int
+		second string
+	}{
+		999,
+		"gophers",
+	}
+	cache.Set("concache", &tempStruct, time.Second*3)
+	value1, _ := cache.Get("concache")
+	fmt.Printf("Value of cache before expired: %v", value1)
+
+	time.Sleep(time.Second * 4)
+
+	cache.DeleteExpiredItems()
+
+	bucket, _ := cache.getBucketWithDjbHasher("concache")
+	item, found := bucket.Items["concache"]
+
+	if found {
+		testing.Errorf("Expect: value of cache should be deleted when expired, but %v", item.Value)
+	}
+}
+
+func TestGetAllItemsCache(testing *testing.T) {
+	cache := NewCache(BUCKETS_COUNT, "cache")
+	cache.Set("GOPHER", 123, NO_EXPIRATION)
+	cache.Set("GOCONCURRENCACHE", "56789", NO_EXPIRATION)
+	allItemsCache := cache.GetAllItemsCache()
+	firstItem := allItemsCache["GOPHER"].Value.(int)
+	secondItem := allItemsCache["GOCONCURRENCACHE"].Value.(string)
+	if firstItem != 123 {
+		testing.Errorf("Expect: value of first item should be 123, but %d", firstItem)
+	}
+	if secondItem != "56789" {
+		testing.Errorf("Expect: value of first item should be 123, but %s", secondItem)
+	}
+}
+
+func TestCountItemsCache(testing *testing.T) {
+	cache := NewCache(BUCKETS_COUNT, "cache")
+	cache.Set("GOPHER", 123, NO_EXPIRATION)
+	cache.Set("GOCONCURRENCACHE", "56789", NO_EXPIRATION)
+	itemsCount := cache.CountItemsCache()
+	if itemsCount != 2 {
+		testing.Errorf("Expect: total items in cache should be 2, but %d", itemsCount)
+	}
+}
+
+func TestFlushAll(testing *testing.T) {
+	cache := NewCache(BUCKETS_COUNT, "cache")
+	cache.Set("GOPHER", 123, NO_EXPIRATION)
+	cache.Set("GOCONCURRENCACHE", "56789", NO_EXPIRATION)
+	cache.FlushAll()
+	if cache.CountItemsCache() > 0 {
+		testing.Errorf("Expect: all items in cache should be cleared empty")
+	}
+}
+
+func TestBackUpCacheToDiskInterval(testing *testing.T) {
+	cache := NewCache(BUCKETS_COUNT, "cache_backup_interval")
+	cache.BackUpCacheToDiskInterval(time.Second * 2)
+	cache.Set("GOCONCURRENCACHE", "56789", NO_EXPIRATION)
+
+	time.Sleep(time.Second * 2)
+	cache.Delete("GOCONCURRENCACHE")
+	cache.LoadCacheFromDisk()
+	_, found := cache.Get("GOCONCURRENCACHE")
+	if !found {
+		testing.Errorf("Expect: cache should be backed up to disk and loaded again successfully")
+	}
+}
+
+func TestPersistAndLoadCache(testing *testing.T) {
+	cache := NewCache(BUCKETS_COUNT, "cache_persistence")
+
+	cache.Set("concache", 999, time.Second*3)
+	cache.PersistCacheToDisk()
+	cache.Delete("concache")
+	value, found := cache.Get("concache")
+	if !found {
+		cache.LoadCacheFromDisk()
+		value, found = cache.Get("concache")
+		if !found {
+			testing.Error("Cannot get cache that was loaded from disk")
+		} else {
+			if value.(int) != 999 {
+				testing.Errorf("Expect: value of first property should be 999, but %d", value.(int))
+			}
+		}
+	} else {
+		testing.Error("Deleting cache with key is not worked")
 	}
 }
 

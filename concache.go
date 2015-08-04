@@ -19,20 +19,20 @@ const (
 )
 
 type Item struct {
-	value       interface{}
-	expiredTime *time.Time
+	Value       interface{}
+	ExpiredTime *time.Time
 }
 
-type concurrentMap struct {
-	sync.RWMutex
-	items map[string]*Item
+type ConcurrentMap struct {
+	Items map[string]*Item
 }
 
-type shardedConcurrentMaps []*concurrentMap
+type ShardedConcurrentMaps []*ConcurrentMap
 
 type Cache struct {
+	sync.RWMutex
 	seed      uint32
-	buckets   shardedConcurrentMaps
+	buckets   ShardedConcurrentMaps
 	cacheName string
 }
 
@@ -46,10 +46,10 @@ func NewCache(shardedMapsCount int, cacheName string) *Cache {
 		seed = uint32(rnd.Uint64())
 	}
 
-	buckets := make([]*concurrentMap, shardedMapsCount)
+	buckets := make([]*ConcurrentMap, shardedMapsCount)
 	for i := 0; i < shardedMapsCount; i++ {
-		buckets[i] = &concurrentMap{
-			items: make(map[string]*Item),
+		buckets[i] = &ConcurrentMap{
+			Items: make(map[string]*Item),
 		}
 	}
 
@@ -95,13 +95,13 @@ func djbHasher(seed uint32, k string) uint32 {
 	return d ^ (d >> 16)
 }
 
-func (cache *Cache) getBucketWithDjbHasher(key string) (*concurrentMap, uint32) {
+func (cache *Cache) getBucketWithDjbHasher(key string) (*ConcurrentMap, uint32) {
 	bucketsCount := (uint32)(len(cache.buckets))
 	bucketIndex := djbHasher(cache.seed, key) % bucketsCount
 	return cache.buckets[bucketIndex], bucketIndex
 }
 
-func (cache *Cache) getBucketWithBuiltInHasher(key string) (*concurrentMap, uint) {
+func (cache *Cache) getBucketWithBuiltInHasher(key string) (*ConcurrentMap, uint) {
 	hasher := fnv.New32()
 	hasher.Write([]byte(key))
 	bucketsCount := len(cache.buckets)
@@ -112,14 +112,14 @@ func (cache *Cache) getBucketWithBuiltInHasher(key string) (*concurrentMap, uint
 func (cache *Cache) Get(key string) (interface{}, bool) {
 	bucket, _ := cache.getBucketWithDjbHasher(key)
 
-	bucket.RLock()
-	item, ok := bucket.items[key]
-	bucket.RUnlock()
+	cache.RLock()
+	item, ok := bucket.Items[key]
+	cache.RUnlock()
 
 	if !ok || IsExpired(item) {
 		return nil, false
 	}
-	return item.value, true
+	return item.Value, true
 }
 
 func (cache *Cache) Set(key string, value interface{}, expiredDuration time.Duration) {
@@ -131,38 +131,38 @@ func (cache *Cache) Set(key string, value interface{}, expiredDuration time.Dura
 
 	bucket, _ := cache.getBucketWithDjbHasher(key)
 
-	bucket.Lock()
-	bucket.items[key] = &Item{
-		value:       value,
-		expiredTime: expiredTime,
+	cache.Lock()
+	bucket.Items[key] = &Item{
+		Value:       value,
+		ExpiredTime: expiredTime,
 	}
-	bucket.Unlock()
+	cache.Unlock()
 }
 
 func (cache *Cache) Delete(key string) {
 	bucket, _ := cache.getBucketWithDjbHasher(key)
-	bucket.Lock()
-	delete(bucket.items, key)
-	bucket.Unlock()
+	cache.Lock()
+	delete(bucket.Items, key)
+	cache.Unlock()
 }
 
 func IsExpired(item *Item) bool {
-	if item.expiredTime == nil {
+	if item.ExpiredTime == nil {
 		return false
 	}
-	return item.expiredTime.Before(time.Now())
+	return item.ExpiredTime.Before(time.Now())
 }
 
 func (cache *Cache) DeleteExpiredItems() {
 	buckets := cache.buckets
 	for _, bucket := range buckets {
-		bucket.Lock()
-		for key, item := range bucket.items {
+		cache.Lock()
+		for key, item := range bucket.Items {
 			if IsExpired(item) {
-				delete(bucket.items, key)
+				delete(bucket.Items, key)
 			}
 		}
-		bucket.Unlock()
+		cache.Unlock()
 	}
 }
 
@@ -182,13 +182,11 @@ func (cache *Cache) GetAllItemsCache() map[string]*Item {
 	allItems := make(map[string]*Item)
 	buckets := cache.buckets
 	for _, bucket := range buckets {
-		bucket.RLock()
-		for key, itemInBucket := range bucket.items {
-			//if !IsExpired(itemInBucket) {
+		cache.RLock()
+		for key, itemInBucket := range bucket.Items {
 			allItems[key] = itemInBucket
-			//}
 		}
-		bucket.RUnlock()
+		cache.RUnlock()
 	}
 	return allItems
 }
@@ -197,9 +195,9 @@ func (cache *Cache) CountItemsCache() int {
 	buckets := cache.buckets
 	numItems := 0
 	for _, bucket := range buckets {
-		bucket.RLock()
-		numItems += len(bucket.items)
-		bucket.RUnlock()
+		cache.RLock()
+		numItems += len(bucket.Items)
+		cache.RUnlock()
 	}
 	return numItems
 }
@@ -207,9 +205,9 @@ func (cache *Cache) CountItemsCache() int {
 func (cache *Cache) FlushAll() {
 	buckets := cache.buckets
 	for _, bucket := range buckets {
-		bucket.Lock()
-		bucket.items = map[string]*Item{}
-		bucket.Unlock()
+		cache.Lock()
+		bucket.Items = map[string]*Item{}
+		cache.Unlock()
 	}
 }
 
@@ -226,6 +224,7 @@ func (cache *Cache) saveCacheToFile() {
 	defer cacheFile.Close()
 	checkError(err)
 	dataEncoder := gob.NewEncoder(cacheFile)
+
 	dataEncoder.Encode(buckets)
 }
 
@@ -248,10 +247,11 @@ func (cache *Cache) BackUpCacheToDiskInterval(backUpInterval time.Duration) {
 func (cache *Cache) LoadCacheFromDisk() {
 	cacheFile, err := os.Open(cache.cacheName + ".txt")
 	defer cacheFile.Close()
+
 	checkError(err)
 
 	dataDecoder := gob.NewDecoder(cacheFile)
-	var bucketsOnFile []*concurrentMap
+	var bucketsOnFile []*ConcurrentMap
 	err = dataDecoder.Decode(&bucketsOnFile)
 
 	checkError(err)
