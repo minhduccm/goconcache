@@ -1,9 +1,9 @@
 # goconcache
-goconcache or concurrent cache in Golang is small library that is used to store key/value in memory. Some features:
-	- Thread safe that can be safely used by multiple goroutines
-	- Storing items with expiration time or forever
-	- Better performance with sharded buckets when multiple goroutines read/write concurrently to same cache instance
-	- Be able to persist values of cache to files on disk, and reload them again
+goconcache or concurrent cache in Golang is small library that is used to store key/value in memory. Some features: <br />
+	- Thread safe that can be safely used by multiple goroutines <br />
+	- Storing items with expiration time or forever <br />
+	- Better performance with sharded buckets when multiple goroutines read/write concurrently to same cache instance <br />
+	- Be able to persist values of cache to files on disk, and reload them again <br />
 
 ## Installing
 
