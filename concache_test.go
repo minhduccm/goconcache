@@ -6,34 +6,11 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/pmylund/go-cache"
 )
 
 const (
 	BUCKETS_COUNT = 32
 )
-
-// var keys []string{
-// 	"gopher1",
-// 	"gopher12",
-// 	"gopher123",
-// 	"gopher1234",
-// 	"gopher12345",
-// 	"gopher123456",
-// 	"gopher1234567",
-// 	"gopher12345678",
-// 	"gopher123456789",
-// 	"1gopher",
-// 	"12gopher",
-// 	"123gopher",
-// 	"1234gopher",
-// 	"12345gopher",
-// 	"123456gopher",
-// 	"1234567gopher",
-// 	"12345678gopher",
-// 	"123456789gopher"
-// }
 
 var dataCache = []struct {
 	key   string
@@ -61,11 +38,6 @@ func TestGetBucketWithDjbHasher(testing *testing.T) {
 	_, bucketIndex3 := cache.getBucketWithDjbHasher("conCache")
 	_, bucketIndex4 := cache.getBucketWithDjbHasher("concurrentCache")
 
-	fmt.Printf("bucketIndex1: %d", bucketIndex1)
-	fmt.Printf("bucketIndex2: %d", bucketIndex2)
-	fmt.Printf("bucketIndex3: %d", bucketIndex3)
-	fmt.Printf("bucketIndex4: %d", bucketIndex4)
-
 	if bucketIndex1 != bucketIndex3 {
 		testing.Errorf("Expect bucketIndex1 == bucketIndex3, but bucketIndex1 = %d and bucketIndex2 = %d", bucketIndex1, bucketIndex3)
 	}
@@ -82,11 +54,6 @@ func TestGetBucketWithBuiltInHasher(testing *testing.T) {
 
 	_, bucketIndex3 := cache.getBucketWithBuiltInHasher("conCache")
 	_, bucketIndex4 := cache.getBucketWithBuiltInHasher("concurrentCache")
-
-	fmt.Printf("bucketIndex1: %d", bucketIndex1)
-	fmt.Printf("bucketIndex2: %d", bucketIndex2)
-	fmt.Printf("bucketIndex3: %d", bucketIndex3)
-	fmt.Printf("bucketIndex4: %d", bucketIndex4)
 
 	if bucketIndex1 != bucketIndex3 {
 		testing.Errorf("Expect bucketIndex1 == bucketIndex3, but bucketIndex1 = %d and bucketIndex2 = %d", bucketIndex1, bucketIndex3)
@@ -242,7 +209,7 @@ func TestPersistAndLoadCache(testing *testing.T) {
 			}
 		}
 	} else {
-		testing.Error("Deleting cache with key is not worked")
+		testing.Error("Deleting cache with key does not work")
 	}
 }
 
@@ -262,26 +229,6 @@ func BenchmarkGetBucketWithDjbHasher(bench *testing.B) {
 	}
 }
 
-// func BenchmarkGetWithShardedCache(bench *testing.B) {
-// 	bench.StopTimer()
-// 	cache := NewCache(BUCKETS_COUNT)
-// 	cache.Set("GOisFUN", "oops", NO_EXPIRATION)
-// 	bench.StartTimer()
-// 	for i := 0; i < bench.N; i++ {
-// 		cache.Get("GOisFUN")
-// 	}
-// }
-
-// func BenchmarkGetWithoutShardedCache(bench *testing.B) {
-// 	bench.StopTimer()
-// 	noShardedCache := cache.New(time.Minute*5, time.Second*30)
-// 	noShardedCache.Set("GOisFUN", "oops", NO_EXPIRATION)
-// 	bench.StartTimer()
-// 	for i := 0; i < bench.N; i++ {
-// 		noShardedCache.Get("GOisFUN")
-// 	}
-// }
-
 func BenchmarkGetWithShardedCache(bench *testing.B) {
 	bench.StopTimer()
 	shardedCache := NewCache(BUCKETS_COUNT, "shardedCache")
@@ -293,10 +240,6 @@ func BenchmarkGetWithShardedCache(bench *testing.B) {
 		shardedCache.Set(keys[i], keys[i], NO_EXPIRATION)
 	}
 
-	// for _, data := range dataCache {
-	// 	shardedCache.Set(data.key, data.value, shardedNO_EXPIRATION)
-	// }
-
 	bench.StartTimer()
 	for i := 0; i < bench.N; i++ {
 		for _, key := range keys {
@@ -305,34 +248,11 @@ func BenchmarkGetWithShardedCache(bench *testing.B) {
 	}
 }
 
-func BenchmarkGetWithoutShardedCache(bench *testing.B) {
-	bench.StopTimer()
-	noShardedCache := cache.New(time.Minute*5, time.Second*30)
-
-	n := 1000
-	keys := make([]string, n)
-	for i := 0; i < n; i++ {
-		keys[i] = "key" + strconv.Itoa(i)
-		noShardedCache.Set(keys[i], keys[i], NO_EXPIRATION)
-	}
-
-	// for _, data := range dataCache {
-	// 	noShardedCache.Set(data.key, data.value, NO_EXPIRATION)
-	// }
-
-	bench.StartTimer()
-	for i := 0; i < bench.N; i++ {
-		for _, key := range keys {
-			noShardedCache.Get(key)
-		}
-	}
-}
-
 func BenchmarkSetWithShardedCache(bench *testing.B) {
 	bench.StopTimer()
 	shardedCache := NewCache(BUCKETS_COUNT, "shardedCache")
 
-	n := 50000
+	n := 5000
 	keys := make([]string, n)
 	for i := 0; i < n; i++ {
 		keys[i] = "key" + strconv.Itoa(i)
@@ -346,31 +266,6 @@ func BenchmarkSetWithShardedCache(bench *testing.B) {
 		for _, key := range keys {
 			go func(key string) {
 				shardedCache.Set(key, key, NO_EXPIRATION)
-				waitGroup.Done()
-			}(key)
-		}
-		waitGroup.Wait()
-	}
-}
-
-func BenchmarkSetWithoutShardedCache(bench *testing.B) {
-	bench.StopTimer()
-	noShardedCache := cache.New(time.Minute*5, time.Millisecond*30)
-
-	n := 50000
-	keys := make([]string, n)
-	for i := 0; i < n; i++ {
-		keys[i] = "key" + strconv.Itoa(i)
-	}
-
-	bench.StartTimer()
-	for i := 0; i < bench.N; i++ {
-		var waitGroup sync.WaitGroup
-		waitGroup.Add(n)
-
-		for _, key := range keys {
-			go func(key string) {
-				noShardedCache.Set(key, key, NO_EXPIRATION)
 				waitGroup.Done()
 			}(key)
 		}
